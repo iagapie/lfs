@@ -1,0 +1,180 @@
+#!/bin/bash
+set +h
+
+print_error() {
+	echo -e "ERROR: $@"
+}
+
+if [ $(id -u) != 0 ]; then
+	print_error "$0 script need to run as root!"
+	exit 1
+fi
+
+LFS="/mnt/lfs"
+CHCMD=""
+
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --lfs) shift
+            LFS=$1
+        ;;
+        *) CHCMD="$CHCMD $1"
+        ;;
+    esac
+    shift
+done
+
+if [[ ! -d $LFS ]]; then
+    print_error "Directory '$LFS' not found!"
+    exit 1
+fi
+
+if [[ ! -L "/tools" || "$(realpath /tools)" != "$LFS/tools" ]]; then
+	print_error "/tools is not a symbolic link of $LFS/tools"
+	exit 1
+fi
+
+if [[ ! -x "/tools/bin/env" && ! -x "$LFS/usr/bin/env" ]]; then
+	print_error "Make sure that '$LFS' is mounted or temporary system is builded!"
+	exit 1
+fi
+
+if [[ -z "$CHCMD" ]]; then
+    if [[ -f "$LFS/bin/bash" ]]; then
+        CHCMD="/bin/bash --login +h"
+    else
+        CHCMD="/tools/bin/bash --login +h"
+    fi
+fi
+
+mount_pseudo() {
+	mkdir -pv $LFS/{dev,proc,sys,run}
+	mount --bind /dev $LFS/dev
+	mount -vt devpts devpts $LFS/dev/pts -o gid=5,mode=620
+	mount -vt proc proc $LFS/proc
+	mount -vt sysfs sysfs $LFS/sys
+	mount -vt tmpfs tmpfs $LFS/run
+	if [ -h $LFS/dev/shm ]; then
+	  mkdir -p $LFS/$(readlink $LFS/dev/shm)
+	fi
+}
+
+umount_pseudo() {
+	mountpoint -q $LFS/dev/pts && umount $LFS/dev/pts
+	mountpoint -q $LFS/dev && umount $LFS/dev
+	mountpoint -q $LFS/run && umount $LFS/run
+	mountpoint -q $LFS/proc && umount $LFS/proc
+	mountpoint -q $LFS/sys && umount $LFS/sys
+}
+
+interrupted() {
+	die "script $(basename $0) aborted!"
+}
+
+die() {
+	[ "$@" ] && print_error $@
+	umount_pseudo
+	exit 1
+}
+
+run_in_chroot() {
+	pushd $LFS &>/dev/null
+	mount_pseudo
+	cp -L /etc/resolv.conf $LFS/etc/
+	chroot "$LFS" $ENVLFS -i \
+	    HOME=/root                  \
+	    TERM="$TERM"                \
+	    PS1='(lfs chroot) \u:\w\$ ' \
+	    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin $@
+	retval=$?
+	umount_pseudo
+	popd &>/dev/null
+	return $retval
+}
+
+lfs_dirs() {
+    mkdir -pv $LFS/dev
+	mknod -m 600 $LFS/dev/console c 5 1 || true
+	mknod -m 666 $LFS/dev/null c 1 3 || true
+
+    mkdir -pv $LFS/bin $LFS/usr/{bin,lib,ports} $LFS/etc || true
+	ln -svf /tools/bin/{bash,cat,chmod,dd,echo,ln,mkdir,pwd,rm,stty,touch} $LFS/bin
+	ln -svf /tools/bin/{env,install,perl,printf}         $LFS/usr/bin
+	ln -svf /tools/lib/libgcc_s.so{,.1}                  $LFS/usr/lib
+	ln -svf /tools/lib/libstdc++.{a,so{,.6}}             $LFS/usr/lib
+
+	ln -svf bash $LFS/bin/sh
+
+	ln -svf /proc/self/mounts $LFS/etc/mtab
+
+    mkdir -p $LFS/var/lib/pkg/{pkg,src,work}
+	touch $LFS/var/lib/pkg/db
+
+    cat > $LFS/etc/passwd << "EOF"
+root:x:0:0:root:/root:/bin/bash
+bin:x:1:1:bin:/dev/null:/bin/false
+daemon:x:6:6:Daemon User:/dev/null:/bin/false
+messagebus:x:18:18:D-Bus Message Daemon User:/var/run/dbus:/bin/false
+systemd-bus-proxy:x:72:72:systemd Bus Proxy:/:/bin/false
+systemd-journal-gateway:x:73:73:systemd Journal Gateway:/:/bin/false
+systemd-journal-remote:x:74:74:systemd Journal Remote:/:/bin/false
+systemd-journal-upload:x:75:75:systemd Journal Upload:/:/bin/false
+systemd-network:x:76:76:systemd Network Management:/:/bin/false
+systemd-resolve:x:77:77:systemd Resolver:/:/bin/false
+systemd-timesync:x:78:78:systemd Time Synchronization:/:/bin/false
+systemd-coredump:x:79:79:systemd Core Dumper:/:/bin/false
+nobody:x:99:99:Unprivileged User:/dev/null:/bin/false
+EOF
+
+    cat > $LFS/etc/group << "EOF"
+root:x:0:
+bin:x:1:daemon
+sys:x:2:
+kmem:x:3:
+tape:x:4:
+tty:x:5:
+daemon:x:6:
+floppy:x:7:
+disk:x:8:
+lp:x:9:
+dialout:x:10:
+audio:x:11:
+video:x:12:
+utmp:x:13:
+usb:x:14:
+cdrom:x:15:
+adm:x:16:
+messagebus:x:18:
+systemd-journal:x:23:
+input:x:24:
+mail:x:34:
+kvm:x:61:
+systemd-bus-proxy:x:72:
+systemd-journal-gateway:x:73:
+systemd-journal-remote:x:74:
+systemd-journal-upload:x:75:
+systemd-network:x:76:
+systemd-resolve:x:77:
+systemd-timesync:x:78:
+systemd-coredump:x:79:
+wheel:x:97:
+nogroup:x:99:
+users:x:999:
+EOF
+}
+
+trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+
+if [[ -x "$LFS/usr/bin/env" ]]; then
+	ENVLFS=/usr/bin/env
+else
+	ENVLFS=/tools/bin/env
+fi
+
+if [[ ! -f "$LFS/var/lib/pkg/db" ]]; then
+	lfs_dirs
+fi
+
+run_in_chroot $CHCMD || die
+
+exit 0

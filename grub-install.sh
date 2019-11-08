@@ -1,0 +1,108 @@
+#!/bin/bash
+set +h
+
+print_error() {
+	echo -e "ERROR: $@"
+}
+
+if [ $(id -u) != 0 ]; then
+	print_error "$0 script need to run as root!"
+	exit 1
+fi
+
+LFS="/mnt/lfs"
+EFI=""
+SWAP=""
+ROOT=""
+
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --lfs) shift
+            LFS=$1
+        ;;
+        --efi) shift
+            EFI=$1
+        ;;
+        --swap) shift
+            SWAP=$1
+        ;;
+        --root) shift
+            ROOT=$1
+        ;;
+    esac
+    shift
+done
+
+if [[ -z $EFI || /dev/$(basename $EFI) != $EFI ]]; then
+    print_error "'$EFI' is not an efi point to mount!"
+	exit 1
+fi
+
+if [[ -z $SWAP || /dev/$(basename $SWAP) != $SWAP ]]; then
+    print_error "'$SWAP' is not a swap point to mount!"
+	exit 1
+fi
+
+if [[ -z $ROOT || /dev/$(basename $ROOT) != $ROOT ]]; then
+    print_error "'$ROOT' is not a root point to mount!"
+	exit 1
+fi
+
+mount_efi() {
+	mkdir -p $LFS/boot/efi
+	mount $EFI $LFS/boot/efi
+}
+
+umount_efi() {
+	mountpoint -q $LFS/boot/efi && umount $LFS/boot/efi
+}
+
+interrupted() {
+	die "script $(basename $0) aborted!"
+}
+
+die() {
+	[ "$@" ] && print_error $@
+    umount_efi
+	exit 1
+}
+
+trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+
+CURDIR=$(cd "$(dirname $0)" && pwd)
+SRCDIR="$LFS/sources"
+mkdir -p $SRCDIR
+
+cat > $LFS/usr/local/bin/lfs-grub-install << "EOF"
+#!/bin/sh
+set +h
+
+EFI="$1"
+SWAP="$2"
+ROOT="$3"
+
+EFI_UUID=$(echo $(blkid -o value $EFI) | grep -Eo '^[^ ]+')
+SWAP_UUID=$(echo $(blkid -o value $SWAP) | grep -Eo '^[^ ]+')
+ROOT_UUID=$(echo $(blkid -o value $ROOT) | grep -Eo '^[^ ]+')
+
+sed -i "s/<xxx>/$ROOT_UUID/" /etc/fstab
+sed -i "s/<yyy>/$SWAP_UUID/" /etc/fstab
+sed -i "s/<zzz>/$EFI_UUID/" /etc/fstab
+
+grub-install \
+    --target=x86_64-efi \
+    --efi-directory=/boot/efi \
+    --bootloader-id=LFS --recheck --debug &> /var/log/lfs-grub
+
+grub-mkconfig -o /boot/grub/grub.cfg
+EOF
+
+chmod +x $LFS/usr/local/bin/lfs-grub-install
+
+mount_efi
+
+sh $CURDIR/chroot.sh --lfs $LFS /usr/local/bin/lfs-grub-install $EFI $SWAP $ROOT || die
+
+umount_efi
+
+exit 0
