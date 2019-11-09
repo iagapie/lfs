@@ -29,11 +29,6 @@ if [[ ! -d $LFS ]]; then
     exit 1
 fi
 
-if [[ ! -L "/tools" || "$(realpath /tools)" != "$LFS/tools" ]]; then
-	print_error "/tools is not a symbolic link of $LFS/tools"
-	exit 1
-fi
-
 if [[ ! -x "/tools/bin/env" && ! -x "$LFS/usr/bin/env" ]]; then
 	print_error "Make sure that '$LFS' is mounted or temporary system is builded!"
 	exit 1
