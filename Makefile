@@ -9,7 +9,11 @@ chroot:
 
 install-core:
 	sh ./port-install --lfs ${LFS} core
+
+install-kernel:
 	sh ./kernel-install --lfs ${LFS} -v ${KV}
+
+install-grub:
 	sh ./grub-install --lfs ${LFS} --efi ${EFI} --swap ${SWAP} --root ${ROOT}
 
 install-xorg:
@@ -17,4 +21,4 @@ install-xorg:
 
 install: install-core install-xorg
 
-.PHONY: chroot install-core install-xorg install
+.PHONY: chroot install-core install-kernel install-grub install-xorg
