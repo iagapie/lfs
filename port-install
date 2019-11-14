@@ -1,0 +1,77 @@
+#!/bin/bash
+set +h
+
+print_error() {
+	echo -e "ERROR: $@"
+}
+
+if [ $(id -u) != 0 ]; then
+	print_error "$0 script need to run as root!"
+	exit 1
+fi
+
+LFS="/mnt/lfs"
+LOCAL="0"
+PORT=""
+COMMAND="depinst -f"
+
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --lfs) shift
+            LFS=$1
+        ;;
+		-l|--local)
+			LOCAL="1"
+		;;
+		-t|--tree)
+			COMMAND="deptree"
+		;;
+		--test)
+			COMMAND="depinst --test"
+		;;
+		*)
+			PORT="${PORT}${1} "
+		;;
+    esac
+    shift
+done
+
+if [ -z "$PORT" ]; then
+	PORT="core"
+fi
+
+interrupted() {
+	die "script $(basename $0) aborted!"
+}
+
+die() {
+	[ "$@" ] && print_error $@
+	exit 1
+}
+
+trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
+
+CURDIR=$(cd "$(dirname $0)" && pwd)
+
+if [[ $LOCAL == "1" ]]; then
+	if [ ! -d $CURDIR/lfs-ports ]; then
+		git clone https://github.com/iagapie/lfs-ports.git
+	else
+		pushd lfs-ports
+		git pull
+		popd
+	fi
+
+    mkdir -p $LFS/usr/ports
+	rm -rf $LFS/usr/ports/*
+	ports="core extra xorg gnome kde"
+	for p in $ports; do
+		cp -ra $CURDIR/lfs-ports/$p $LFS/usr/ports/
+	done
+else
+	sh $CURDIR/chroot --lfs $LFS ports -u || die
+fi
+
+sh $CURDIR/chroot --lfs $LFS prt-get $COMMAND $PORT || die
+
+exit 0

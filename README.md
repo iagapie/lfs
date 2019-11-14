@@ -28,3 +28,8 @@ After install Xorg:
 ```bash
 ldconfig
 ```
+
+```bash
+useradd -m -s /bin/bash lfs
+usermod -a -G wheel lfs
+```

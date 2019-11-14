@@ -11,6 +11,8 @@ if [ $(id -u) != 0 ]; then
 fi
 
 LFS="/mnt/lfs"
+SRCDIR="$LFS/sources"
+PKGDIR="$LFS/packages"
 CHCMD=""
 
 while [[ "$1" != "" ]]; do
@@ -62,12 +64,24 @@ umount_pseudo() {
 	mountpoint -q $LFS/sys && umount $LFS/sys
 }
 
+mount_cache() {
+	mkdir -p $LFS/var/lib/pkg/{pkg,src} $SRCDIR $PKGDIR
+	mount --bind $LFS/sources $LFS/var/lib/pkg/src
+	mount --bind $LFS/packages $LFS/var/lib/pkg/pkg
+}
+
+umount_cache() {
+	mountpoint -q $LFS/var/lib/pkg/src && umount $LFS/var/lib/pkg/src
+	mountpoint -q $LFS/var/lib/pkg/pkg && umount $LFS/var/lib/pkg/pkg
+}
+
 interrupted() {
 	die "script $(basename $0) aborted!"
 }
 
 die() {
 	[ "$@" ] && print_error $@
+	umount_cache
 	umount_pseudo
 	exit 1
 }
@@ -170,6 +184,10 @@ if [[ ! -f "$LFS/var/lib/pkg/db" ]]; then
 	lfs_dirs
 fi
 
+mount_cache
+
 run_in_chroot $CHCMD || die
+
+umount_cache
 
 exit 0
