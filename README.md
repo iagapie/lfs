@@ -31,5 +31,10 @@ ldconfig
 
 ```bash
 useradd -m -s /bin/bash lfs
-usermod -a -G wheel lfs
+usermod -a -G wheel,netdev,audio,video,usb,mail,cdrom lfs
+passwd lfs
+cat > /home/lfs/.xinitrc << "EOF"
+dbus-launch --exit-with-session /usr/bin/startplasma-x11
+EOF
+chown lfs:lfs /home/lfs/.xinitrc
 ```
