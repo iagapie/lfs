@@ -11,23 +11,13 @@ if [ $(id -u) != 0 ]; then
 fi
 
 LFS="/mnt/lfs"
-LOCAL="0"
 PORT=""
-COMMAND="depinst -f"
+COMMAND="install -c --no-confirm"
 
 while [[ "$1" != "" ]]; do
     case $1 in
-        --lfs) shift
-            LFS=$1
-        ;;
-		-l|--local)
-			LOCAL="1"
-		;;
-		-t|--tree)
-			COMMAND="deptree"
-		;;
-		--test)
-			COMMAND="depinst --test"
+		-d|--deplist)
+			COMMAND="deplist"
 		;;
 		*)
 			PORT="${PORT}${1} "
@@ -53,25 +43,8 @@ trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
 CURDIR=$(cd "$(dirname $0)" && pwd)
 
-if [[ $LOCAL == "1" ]]; then
-	if [ ! -d $CURDIR/lfs-ports ]; then
-		git clone https://github.com/iagapie/lfs-ports.git
-	else
-		pushd lfs-ports
-		git pull
-		popd
-	fi
+sh $CURDIR/chroot "scratch sync" || die
 
-    mkdir -p $LFS/usr/ports
-	rm -rf $LFS/usr/ports/*
-	ports="core extra xorg gnome kde"
-	for p in $ports; do
-		cp -ra $CURDIR/lfs-ports/$p $LFS/usr/ports/
-	done
-else
-	sh $CURDIR/chroot --lfs $LFS ports -u || die
-fi
-
-sh $CURDIR/chroot --lfs $LFS prt-get $COMMAND $PORT || die
+sh $CURDIR/chroot "scratch $COMMAND $PORT" || die
 
 exit 0

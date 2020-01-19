@@ -1,48 +1,12 @@
 #!/bin/bash
 set +h
 
+LFS="/mnt/lfs"
+CHCMD="$1"
+
 print_error() {
 	echo -e "ERROR: $@"
 }
-
-if [ $(id -u) != 0 ]; then
-	print_error "$0 script need to run as root!"
-	exit 1
-fi
-
-LFS="/mnt/lfs"
-SRCDIR="$LFS/sources"
-PKGDIR="$LFS/packages"
-CHCMD=""
-
-while [[ "$1" != "" ]]; do
-    case $1 in
-        --lfs) shift
-            LFS=$1
-        ;;
-        *) CHCMD="$CHCMD $1"
-        ;;
-    esac
-    shift
-done
-
-if [[ ! -d $LFS ]]; then
-    print_error "Directory '$LFS' not found!"
-    exit 1
-fi
-
-if [[ ! -x "/tools/bin/env" && ! -x "$LFS/usr/bin/env" ]]; then
-	print_error "Make sure that '$LFS' is mounted or temporary system is builded!"
-	exit 1
-fi
-
-if [[ -z "$CHCMD" ]]; then
-    if [[ -f "$LFS/bin/bash" ]]; then
-        CHCMD="/bin/bash --login +h"
-    else
-        CHCMD="/tools/bin/bash --login +h"
-    fi
-fi
 
 mount_pseudo() {
 	mkdir -pv $LFS/{dev,proc,sys,run}
@@ -64,24 +28,12 @@ umount_pseudo() {
 	mountpoint -q $LFS/sys && umount $LFS/sys
 }
 
-mount_cache() {
-	mkdir -p $LFS/var/lib/pkg/{pkg,src} $SRCDIR $PKGDIR
-	mount --bind $LFS/sources $LFS/var/lib/pkg/src
-	mount --bind $LFS/packages $LFS/var/lib/pkg/pkg
-}
-
-umount_cache() {
-	mountpoint -q $LFS/var/lib/pkg/src && umount $LFS/var/lib/pkg/src
-	mountpoint -q $LFS/var/lib/pkg/pkg && umount $LFS/var/lib/pkg/pkg
-}
-
 interrupted() {
 	die "script $(basename $0) aborted!"
 }
 
 die() {
 	[ "$@" ] && print_error $@
-	umount_cache
 	umount_pseudo
 	exit 1
 }
@@ -116,8 +68,10 @@ lfs_dirs() {
 
 	ln -svf /proc/self/mounts $LFS/etc/mtab
 
-    mkdir -p $LFS/var/lib/pkg/{pkg,src,work}
-	touch $LFS/var/lib/pkg/db
+	mkdir -p $LFS/var/lib/scratchpkg/index $LFS/var/cache/scratchpkg/{packages,sources,work}
+
+	install -dv -m 0750 $LFS/root
+	install -dv -m 1777 $LFS/tmp $LFS/var/tmp
 
     cat > $LFS/etc/passwd << "EOF"
 root:x:0:0:root:/root:/bin/bash
@@ -172,6 +126,29 @@ users:x:999:
 EOF
 }
 
+if [ $(id -u) != 0 ]; then
+	print_error "$0 script need to run as root!"
+	exit 1
+fi
+
+if [[ ! -d $LFS ]]; then
+    print_error "Directory '$LFS' not found!"
+    exit 1
+fi
+
+if [[ ! -x "/tools/bin/env" && ! -x "$LFS/usr/bin/env" ]]; then
+	print_error "Make sure that '$LFS' is mounted or temporary system is builded!"
+	exit 1
+fi
+
+if [[ -z "$CHCMD" ]]; then
+    if [[ -f "$LFS/bin/bash" ]]; then
+        CHCMD="/bin/bash --login +h"
+    else
+        CHCMD="/tools/bin/bash --login +h"
+    fi
+fi
+
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
 if [[ -x "$LFS/usr/bin/env" ]]; then
@@ -180,14 +157,10 @@ else
 	ENVLFS=/tools/bin/env
 fi
 
-if [[ ! -f "$LFS/var/lib/pkg/db" ]]; then
+if [[ ! -d "$LFS/var/lib/scratchpkg/index" ]]; then
 	lfs_dirs
 fi
 
-mount_cache
-
 run_in_chroot $CHCMD || die
-
-umount_cache
 
 exit 0
