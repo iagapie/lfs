@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 set +h
 
 print_error() {
@@ -101,6 +101,6 @@ EOF
 
 chmod +x $LFS/usr/local/bin/kernel-install
 
-sh $CURDIR/chroot /usr/local/bin/kernel-install $KV $CLEAN || die
+sh $CURDIR/chroot "/usr/local/bin/kernel-install $KV $CLEAN" || die
 
 exit 0

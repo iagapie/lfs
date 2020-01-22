@@ -12,7 +12,7 @@ fi
 
 LFS="/mnt/lfs"
 PORT=""
-COMMAND="install -c --no-confirm"
+COMMAND="install -c"
 
 while [[ "$1" != "" ]]; do
     case $1 in
