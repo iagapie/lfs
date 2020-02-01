@@ -46,7 +46,7 @@ run_in_chroot() {
 	    HOME=/root                  \
 	    TERM="$TERM"                \
 	    PS1='(lfs chroot) \u:\w\$ ' \
-	    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin $@
+	    PATH=/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/tools/bin $@
 	retval=$?
 	umount_pseudo
 	popd &>/dev/null
