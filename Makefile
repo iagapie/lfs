@@ -1,23 +1,22 @@
-LFS=/mnt/lfs
 EFI=""
 SWAP=""
 ROOT=""
-KV="5.3.8"
+KV="5.4.8"
 
 chroot:
-	sh ./chroot --lfs ${LFS}
+	sh ./chroot
 
 install-core:
-	sh ./port-install --lfs ${LFS} core
+	sh ./port-install core
 
 install-kernel:
-	sh ./kernel-install --lfs ${LFS} -v ${KV}
+	sh ./kernel-install -v ${KV}
 
 install-grub:
-	sh ./grub-install --lfs ${LFS} --efi ${EFI} --swap ${SWAP} --root ${ROOT}
+	sh ./grub-install --efi ${EFI} --swap ${SWAP} --root ${ROOT}
 
 install-xorg:
-	sh ./port-install --lfs ${LFS} xorg
+	sh ./port-install xorg
 
 install: install-core install-xorg
 
