@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 set +h
 
 print_error() {
@@ -12,18 +12,15 @@ fi
 
 CURDIR=$(cd "$(dirname $0)" && pwd)
 LFS="/mnt/lfs"
-KV="5.3.8"
+KV="5.4.8"
 URL="https://www.kernel.org/pub/linux/kernel/v5.x/linux-$KV.tar.xz"
 CLEAN="0"
-SRCDIR="$LFS/sources"
+SRCDIR="$LFS/var/cache/scratchpkg/sources"
 
 mkdir -p $SRCDIR
 
 while [[ "$1" != "" ]]; do
     case $1 in
-        --lfs) shift
-            LFS=$1
-        ;;
         -v|--version) shift
             KV=$1
         ;;
@@ -104,6 +101,6 @@ EOF
 
 chmod +x $LFS/usr/local/bin/kernel-install
 
-sh $CURDIR/chroot --lfs $LFS /usr/local/bin/kernel-install $KV $CLEAN || die
+sh $CURDIR/chroot "/usr/local/bin/kernel-install $KV $CLEAN" || die
 
 exit 0

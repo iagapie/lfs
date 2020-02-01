@@ -17,9 +17,6 @@ ROOT=""
 
 while [[ "$1" != "" ]]; do
     case $1 in
-        --lfs) shift
-            LFS=$1
-        ;;
         --efi) shift
             EFI=$1
         ;;
@@ -70,8 +67,6 @@ die() {
 trap "interrupted" SIGHUP SIGINT SIGQUIT SIGTERM
 
 CURDIR=$(cd "$(dirname $0)" && pwd)
-SRCDIR="$LFS/sources"
-mkdir -p $SRCDIR
 
 cat > $LFS/usr/local/bin/lfs-grub-install << "EOF"
 #!/bin/sh
@@ -101,7 +96,7 @@ chmod +x $LFS/usr/local/bin/lfs-grub-install
 
 mount_efi
 
-sh $CURDIR/chroot --lfs $LFS /usr/local/bin/lfs-grub-install $EFI $SWAP $ROOT || die
+sh $CURDIR/chroot "/usr/local/bin/lfs-grub-install $EFI $SWAP $ROOT" || die
 
 umount_efi
 
